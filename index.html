@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #ffffff;
+      font-family: monospace;
+      user-select: none;
+    }
+    #game-container {
+      position: relative;
+      display: inline-block;
+    }
+    canvas {
+      border: 3px solid #000;
+      background: #ffffff;
+      cursor: pointer;
+      display: block;
+    }
+    .controls-bar {
+      margin-top: 10px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      font-size: 13px;
+      color: #222;
+    }
+    .speed-btn {
+      padding: 4px 10px;
+      font-size: 14px;
+      font-family: monospace;
+      font-weight: bold;
+      background-color: #000;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .speed-btn:hover {
+      background-color: #444;
+    }
+    .speed-display {
+      font-weight: bold;
+      min-width: 80px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div #id="game-container">
+    <canvas id="pong" width="700" height="400" tabindex="1"></canvas>
+  </div>
+
+  <div class="controls-bar">
+    <span><b>Mouse</b>: Move Paddle</span>
+    <span>|</span>
+    <span><b>SPACE</b>: Serve</span>
+    <span>|</span>
+    <button class="speed-btn" onclick="changeSpeed(-1)">- Speed</button>
+    <span class="speed-display" id="speed-label">Speed: 1x</span>
+    <button class="speed-btn" onclick="changeSpeed(1)">+ Speed</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('pong');
+    const ctx = canvas.getContext('2d');
+
+    const PADDLE_WIDTH = 10;
+    const PADDLE_HEIGHT = 70;
+    const BALL_RADIUS = 8;
+
+    let playerY = (canvas.height - PADDLE_HEIGHT) / 2;
+    let aiY = (canvas.height - PADDLE_HEIGHT) / 2;
+    let ballX = canvas.width / 2;
+    let ballY = canvas.height / 2;
+    
+    let baseSpeed = 5;
+    let speedMultiplier = 1;
+    let ballSpeedX = 0;
+    let ballSpeedY = 0;
+
+    let playerScore = 0;
+    let aiScore = 0;
+    let isServed = false;
+
+    // Prevent scrolling when interacting with canvas
+    canvas.addEventListener('mouseenter', () => canvas.focus());
+    
+    // Track mouse movement over canvas
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      playerY = e.clientY - rect.top - (PADDLE_HEIGHT / 2);
+      if (playerY < 0) playerY = 0;
+      if (playerY > canvas.height - PADDLE_HEIGHT) playerY = canvas.height - PADDLE_HEIGHT;
+    });
+
+    // Speed Control Function
+    function changeSpeed(delta) {
+      if (delta > 0 && speedMultiplier < 2.5) {
+        speedMultiplier = parseFloat((speedMultiplier + 0.25).toFixed(2));
+      } else if (delta < 0 && speedMultiplier > 0.5) {
+        speedMultiplier = parseFloat((speedMultiplier - 0.25).toFixed(2));
+      }
+      document.getElementById('speed-label').textContent = `Speed: ${speedMultiplier}x`;
+
+      // Update current ball velocity dynamically if ball is in motion
+      if (isServed) {
+        const currentDirX = ballSpeedX >= 0 ? 1 : -1;
+        const currentDirY = ballSpeedY >= 0 ? 1 : -1;
+        ballSpeedX = currentDirX * baseSpeed * speedMultiplier;
+        ballSpeedY = currentDirY * (Math.abs(ballSpeedY) || 2);
+      }
+    }
+
+    // Key Listeners
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault(); // Prevent page scrolling on Spacebar
+        if (!isServed) {
+          isServed = true;
+          const dirX = Math.random() > 0.5 ? 1 : -1;
+          ballSpeedX = dirX * baseSpeed * speedMultiplier;
+          ballSpeedY = (Math.random() * 4 - 2) * speedMultiplier;
+        }
+      }
+    });
+
+    function update() {
+      if (!isServed) return;
+
+      ballX += ballSpeedX;
+      ballY += ballSpeedY;
+
+      // Bounce top/bottom
+      if (ballY - BALL_RADIUS < 0 || ballY + BALL_RADIUS > canvas.height) {
+        ballSpeedY = -ballSpeedY;
+      }
+
+      // Left Paddle Collision
+      if (ballX - BALL_RADIUS < PADDLE_WIDTH) {
+        if (ballY > playerY && ballY < playerY + PADDLE_HEIGHT) {
+          ballSpeedX = -ballSpeedX * 1.05;
+          ballX = PADDLE_WIDTH + BALL_RADIUS;
+        } else if (ballX < 0) {
+          aiScore++;
+          reset();
+        }
+      }
+
+      // Right Paddle Collision
+      if (ballX + BALL_RADIUS > canvas.width - PADDLE_WIDTH) {
+        if (ballY > aiY && ballY < aiY + PADDLE_HEIGHT) {
+          ballSpeedX = -ballSpeedX * 1.05;
+          ballX = canvas.width - PADDLE_WIDTH - BALL_RADIUS;
+        } else if (ballX > canvas.width) {
+          playerScore++;
+          reset();
+        }
+      }
+
+      // AI Paddle Movement
+      const aiCenter = aiY + PADDLE_HEIGHT / 2;
+      const aiSpeed = 4 * speedMultiplier;
+      if (aiCenter < ballY - 15) aiY += aiSpeed;
+      else if (aiCenter > ballY + 15) aiY -= aiSpeed;
+    }
+
+    function reset() {
+      ballX = canvas.width / 2;
+      ballY = canvas.height / 2;
+      ballSpeedX = 0;
+      ballSpeedY = 0;
+      isServed = false;
+    }
+
+    function draw() {
+      // Clear background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Center Dotted Line
+      ctx.strokeStyle = '#888888';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Scores
+      ctx.fillStyle = '#000000';
+      ctx.font = '24px monospace';
+      ctx.fillText(playerScore, canvas.width / 4, 35);
+      ctx.fillText(aiScore, (3 * canvas.width) / 4, 35);
+
+      // Left Paddle (Player)
+      ctx.fillRect(0, playerY, PADDLE_WIDTH, PADDLE_HEIGHT);
+
+      // Right Paddle (AI)
+      ctx.fillRect(canvas.width - PADDLE_WIDTH, aiY, PADDLE_WIDTH, PADDLE_HEIGHT);
+
+      // Ball (Red)
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (!isServed) {
+        ctx.fillStyle = '#000000';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Hover canvas & press SPACE to Serve', canvas.width / 2, canvas.height / 2 + 40);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>
